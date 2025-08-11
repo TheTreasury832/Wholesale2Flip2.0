@@ -1,1 +1,2 @@
-name,email
+name,email,phone,cash_available,verified,preferences,areas
+ABC Capital,acq@abccapital.com,555-111-2222,500000,1,"SFR 3/2, Light Rehab","Houston TX, Dallas TX"

@@ -1,1 +1,1 @@
-# main app stub
+# (App code created in a previous cell)

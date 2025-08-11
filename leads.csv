@@ -1,1 +1,2 @@
-name,email
+name,email,phone,source,status,notes
+Maria Lopez,maria@example.com,555-789-0000,Referral,Hot,Wants quick close
