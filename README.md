@@ -1,1 +1,1 @@
-Run: pip install -r requirements.txt && streamlit run app_w2f.py
+# Placeholder for README.md

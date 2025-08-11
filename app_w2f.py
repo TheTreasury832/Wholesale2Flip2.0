@@ -1,1 +1,1 @@
-# (App code created in a previous cell)
+# Placeholder for app_w2f.py
