@@ -1,1 +1,12 @@
-# Placeholder for config.toml
+[theme]
+primaryColor = "#8B5CF6"
+backgroundColor = "#1a1a2e"
+secondaryBackgroundColor = "#16213e"
+textColor = "#ffffff"
+font = "sans serif"
+
+[server]
+# Avoid inotify limits on some hosts
+fileWatcherType = "none"
+enableCORS = false
+enableXsrfProtection = true

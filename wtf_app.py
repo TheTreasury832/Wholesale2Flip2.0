@@ -1,22 +1,25 @@
 
 """
-WTF (Wholesale2Flip) — Incremental Upgrades
-Drop-in Streamlit app: wtf_app.py
-
-Keeps the same DB schema (properties, leads, buyers, deals, lois, contracts)
-and adds: Pipeline Kanban + funnel, Buyer/Lender importer (CSV/Sheets), BRRRR & SubTo
-calculators, state-based LOI/Contract PDF generation with template merge.
+WTF (Wholesale2Flip) — Incremental Upgrades (Patched)
+- Plotly now optional (graceful fallback to bar_chart if not installed)
+- Google Sheets importer updated to use google.oauth2.service_account (no oauth2client)
+- Adds Streamlit server file watcher guidance via config.toml (see supplied config)
 """
 import os, io, json, uuid, math, sqlite3, datetime as dt
-from dataclasses import dataclass
-from typing import List, Dict, Optional
 from pathlib import Path
+from typing import Dict, Optional
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 
-# Optional PDF libs
+# Try Plotly (optional). If missing, we fallback to st.bar_chart.
+try:
+    import plotly.graph_objects as go
+    PLOTLY_OK = True
+except Exception:
+    PLOTLY_OK = False
+
+# Optional PDF libs (graceful fallback to .txt if missing)
 try:
     from reportlab.lib.pagesizes import LETTER
     from reportlab.pdfgen import canvas as rl_canvas
@@ -134,7 +137,7 @@ def match_buyers(city, state, price):
 # PDF helpers
 def _write_text_pdf(lines, out_path: Path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    if REPORTLAB_OK:
+    if REPORTLAB_OK and str(out_path).lower().endswith(".pdf"):
         c = rl_canvas.Canvas(str(out_path), pagesize=LETTER)
         width, height = LETTER; y = height - 72
         for line in lines:
@@ -142,7 +145,7 @@ def _write_text_pdf(lines, out_path: Path):
             if y < 72: c.showPage(); y = height - 72
         c.save(); return out_path
     else:
-        txt = out_path.with_suffix(".txt")
+        txt = Path(str(out_path).replace(".pdf",".txt"))
         txt.write_text("\n".join(lines), encoding="utf-8")
         return txt
 
@@ -224,6 +227,7 @@ def sidebar_nav():
 def page_pipeline():
     st.markdown('<div class="main-header">Deal Pipeline</div>', unsafe_allow_html=True)
     create_dummy_deals()
+    import numpy as np
     df = list_deals()
     stage_counts = df["stage"].value_counts().reindex(KANBAN_STAGES, fill_value=0)
     cols = st.columns(len(KANBAN_STAGES))
@@ -231,10 +235,15 @@ def page_pipeline():
     for i,(stage,count) in enumerate(stage_counts.items()):
         with cols[i]:
             st.markdown(f"<div class='metric-card'><h4 style='margin:0;color:{colors[i]}'>{stage}</h4><div style='font-size:28px;font-weight:800;color:white'>{int(count)}</div></div>", unsafe_allow_html=True)
-    fig = go.Funnel(y=KANBAN_STAGES, x=[stage_counts.get(s,0) for s in KANBAN_STAGES], textinfo="value+percent initial", marker_color=colors)
-    fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#fff")
-    st.plotly_chart(fig, use_container_width=True)
+    if PLOTLY_OK:
+        fig = go.Funnel(y=KANBAN_STAGES, x=[stage_counts.get(s,0) for s in KANBAN_STAGES], textinfo="value+percent initial", marker_color=colors)
+        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#fff")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Plotly not installed; showing fallback bar chart. Add `plotly` to requirements.txt for the funnel.")
+        st.bar_chart(pd.DataFrame({"count": [stage_counts.get(s,0) for s in KANBAN_STAGES]}, index=KANBAN_STAGES))
 
+    # Kanban
     kcols = st.columns(len(KANBAN_STAGES))
     for i, stage in enumerate(KANBAN_STAGES):
         with kcols[i]:
@@ -279,12 +288,16 @@ def importer_from_csv(file):
     return len(std)
 
 def importer_from_google_sheet(sheet_url: str) -> int:
+    """
+    Uses google.oauth2.service_account (no oauth2client).
+    Put service account JSON in .streamlit/secrets.toml under [gcp_service_account].
+    Share the sheet with that service account email.
+    """
     try:
         import gspread
-        from oauth2client.service_account import ServiceAccountCredentials
-        creds_dict = st.secrets["gcp_service_account"]
-        scope = ['https://spreadsheets.google.com/feeds','https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(dict(creds_dict), scope)
+        from google.oauth2.service_account import Credentials
+        scopes = ['https://www.googleapis.com/auth/spreadsheets','https://www.googleapis.com/auth/drive']
+        creds = Credentials.from_service_account_info(dict(st.secrets["gcp_service_account"]), scopes=scopes)
         client = gspread.authorize(creds)
         sh = client.open_by_url(sheet_url); ws = sh.sheet1
         records = ws.get_all_records()
@@ -306,9 +319,9 @@ def page_buyers():
             if up is not None:
                 n = importer_from_csv(up); st.success(f"Imported/updated {n} buyers.")
         with c2:
-            url = st.text_input("Google Sheet URL"); 
+            url = st.text_input("Google Sheet URL")
             if st.button("Import from Google Sheet", use_container_width=True):
-                n = importer_from_google_sheet(url); 
+                n = importer_from_google_sheet(url)
                 if n>0: st.success(f"Imported/updated {n} buyers from Google Sheet.")
     with tab3:
         colA,colB,colC = st.columns(3)
