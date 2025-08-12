@@ -6,7 +6,6 @@ textColor = "#ffffff"
 font = "sans serif"
 
 [server]
-# Avoid inotify limits on some hosts
 fileWatcherType = "none"
 enableCORS = false
 enableXsrfProtection = true
